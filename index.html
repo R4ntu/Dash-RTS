@@ -59,6 +59,15 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .upload-btn{position:relative;overflow:hidden;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:5px 12px;border-radius:7px;background:var(--or);border:none;color:#fff;cursor:pointer;transition:opacity .15s;white-space:nowrap}
 .upload-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .upload-btn:hover{opacity:.88}
+.cache-badge{font-size:10px;font-family:'JetBrains Mono',monospace;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;display:flex;align-items:center;gap:5px}
+.cache-badge svg{width:10px;height:10px;stroke:#34d399}
+.cache-dot{width:6px;height:6px;border-radius:50%;background:#34d399;display:inline-block;animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
+.clr-cache-btn{font-size:10px;color:var(--t3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:5px;transition:color .15s}
+.clr-cache-btn:hover{color:var(--red)}
+/* toast */
+#toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--bg3);border:1px solid var(--ln2);border-radius:10px;padding:10px 16px;font-size:12px;color:var(--t2);font-family:'JetBrains Mono',monospace;display:none;align-items:center;gap:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:fadeInUp .25s ease}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 /* ─── MAIN ─── */
 .main{max-width:1420px;margin:0 auto;padding:22px 20px 56px}
@@ -213,7 +222,7 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
       </svg>
     </div>
     <div class="dz-h">Arraste o CSV ou clique para selecionar</div>
-    <div class="dz-p">Os dados são processados localmente no seu navegador.<br>Nenhuma informação é enviada a servidores externos.</div>
+    <div class="dz-p">Os dados são processados localmente no seu navegador.<br>Nenhuma informação é enviada a servidores externos.<br><span style="color:var(--grn);font-size:11px">✓ Após carregar, o dashboard salva a base automaticamente.</span></div>
     <div class="dz-hint">
       <b>Colunas esperadas:</b><br>
       DATA · SHOP NAME · QNTD PEÇAS · DATA UPDATE<br>
@@ -238,6 +247,11 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
     <div class="hdr-r">
       <span class="hdr-fname" id="h-fname">—</span>
       <span class="hdr-badge" id="h-ref">—</span>
+      <div class="cache-badge" id="cache-badge" style="display:none">
+        <span class="cache-dot"></span>
+        <span id="cache-ts">—</span>
+      </div>
+      <button class="clr-cache-btn" id="clr-cache-btn" title="Limpar dados salvos" style="display:none">✕ cache</button>
       <label class="upload-btn">
         <input type="file" id="ri" accept=".csv,.txt">
         ↑ Atualizar CSV
@@ -412,6 +426,8 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
   <footer id="dash-foot">SHOPEE · RTS INHOUSE PE · DASHBOARD</footer>
 </div>
 
+<div id="toast" style="display:none"></div>
+
 <script>
 /* ══════════ GLOBALS ══════════ */
 var CI = {}, ALL = [], _fStatus='', _fAnd='', _fSeller='', _fQmin=null, _fQmax=null;
@@ -422,6 +438,69 @@ var TODAY = new Date(); TODAY.setHours(0,0,0,0);
 var RESP_COLORS = {'Ruan':'#3b82f6','Kimberly':'#10b981','Isabel':'#8b5cf6','Fernanda':'#d97706','Renata Dias':'#ef4444'};
 var AND_COLORS  = ['#3b82f6','#d97706','#ef4444','#10b981','#8b5cf6','#ee4d2d','#46607f','#9ca3af','#06b6d4','#ec4899'];
 var MOT_COLORS  = ['#ee4d2d','#d97706','#3b82f6','#8b5cf6','#10b981','#ef4444','#9ca3af','#06b6d4'];
+
+var LS_KEY = 'rts_dashboard_v1';
+
+/* ── Toast helper ── */
+function showToast(msg, dur){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='flex';
+  clearTimeout(t._tmr);
+  t._tmr=setTimeout(function(){t.style.display='none';},dur||3000);
+}
+
+/* ── Cache badge ── */
+function showCacheBadge(ts){
+  var bd=document.getElementById('cache-badge');
+  var clr=document.getElementById('clr-cache-btn');
+  var el=document.getElementById('cache-ts');
+  if(ts){
+    var d=new Date(ts);
+    var fmt2=function(n){return n.toString().padStart(2,'0');};
+    el.textContent=fmt2(d.getDate())+'/'+fmt2(d.getMonth()+1)+' '+fmt2(d.getHours())+':'+fmt2(d.getMinutes());
+    bd.style.display='flex';
+    clr.style.display='inline';
+  } else {
+    bd.style.display='none';
+    clr.style.display='none';
+  }
+}
+
+/* ── Save to localStorage ── */
+function saveToCache(csvText, fname){
+  try{
+    var payload={csvText:csvText,fname:fname,ts:Date.now()};
+    localStorage.setItem(LS_KEY,JSON.stringify(payload));
+  }catch(e){console.warn('Cache save failed',e);}
+}
+
+/* ── Load from localStorage on startup ── */
+function tryLoadCache(){
+  try{
+    var raw=localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    var payload=JSON.parse(raw);
+    if(!payload||!payload.csvText) return false;
+    document.getElementById('h-fname').textContent=payload.fname||'—';
+    Papa.parse(payload.csvText,{
+      header:true, skipEmptyLines:true, delimiter:';',
+      complete:function(r){
+        processData(r.data, payload.fname||'cache', true);
+        showCacheBadge(payload.ts);
+        showToast('✓ Dados restaurados do cache · '+new Date(payload.ts).toLocaleString('pt-BR'),4000);
+      }
+    });
+    return true;
+  }catch(e){console.warn('Cache load failed',e);return false;}
+}
+
+/* ── Clear cache button ── */
+document.getElementById('clr-cache-btn').addEventListener('click',function(){
+  if(confirm('Limpar dados salvos e voltar para a tela de upload?')){
+    localStorage.removeItem(LS_KEY);
+    location.reload();
+  }
+});
 
 /* ══════════ UPLOAD ══════════ */
 var dz=document.getElementById('dz'), fi=document.getElementById('fi'), ri=document.getElementById('ri');
@@ -435,16 +514,27 @@ function loadFile(f){
   document.getElementById('h-fname').textContent = f.name;
   var reader = new FileReader();
   reader.onload = function(e){
-    Papa.parse(e.target.result,{
+    var csvText = e.target.result;
+    saveToCache(csvText, f.name);
+    Papa.parse(csvText,{
       header:true, skipEmptyLines:true, delimiter:';',
-      complete:function(r){processData(r.data,f.name);}
+      complete:function(r){
+        processData(r.data, f.name, false);
+        showCacheBadge(Date.now());
+        showToast('✓ Base carregada e salva · '+f.name, 3500);
+      }
     });
   };
   reader.readAsText(f,'latin1');
 }
 
+/* ── Auto-restore on startup ── */
+document.addEventListener('DOMContentLoaded',function(){
+  tryLoadCache();
+});
+
 /* ══════════ PROCESS ══════════ */
-function processData(rows, fname){
+function processData(rows, fname, fromCache){
   var norm = rows.map(function(row){
     var r={};
     Object.keys(row).forEach(function(k){r[k.trim().replace(/\n/g,' ')]=String(row[k]||'').trim();});
