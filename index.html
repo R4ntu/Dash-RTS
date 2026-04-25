@@ -252,6 +252,7 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
         <span id="cache-ts">—</span>
       </div>
       <button class="clr-cache-btn" id="clr-cache-btn" title="Limpar dados salvos" style="display:none">✕ cache</button>
+      <button id="share-btn" onclick="exportSharedFile()" style="display:none;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:5px 12px;border-radius:7px;background:var(--grn);border:none;color:#080c14;cursor:pointer;transition:opacity .15s;white-space:nowrap">⬇ Compartilhar</button>
       <label class="upload-btn">
         <input type="file" id="ri" accept=".csv,.txt">
         ↑ Atualizar CSV
@@ -369,6 +370,16 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
           </div>
           <div id="and-leg" style="margin-top:8px"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- EVOLUÇÃO MENSAL -->
+    <div class="slbl">Evolução Mensal · Peças Solicitadas vs Separadas</div>
+    <div class="card">
+      <div class="card-t">Peças por Mês — DATA UPDATE</div>
+      <div class="card-s">Azul = solicitadas (QNTD) · Verde = já separadas · Laranja = ainda faltando</div>
+      <div class="ch" style="height:260px">
+        <canvas id="monthly-chart" role="img" aria-label="Evolução mensal">Evolução mensal.</canvas>
       </div>
     </div>
 
@@ -499,6 +510,7 @@ function tryLoadCache(){
       header:true, skipEmptyLines:true, delimiter:';',
       complete:function(r){
         processData(r.data, payload.fname||'cache', true);
+        // Restore dates lost in localStorage string round-trip is handled in processData
         showCacheBadge(payload.ts);
         showToast('✓ Dados restaurados do cache · '+new Date(payload.ts).toLocaleString('pt-BR'),4000);
       }
@@ -543,6 +555,33 @@ function loadFile(f){
 
 /* ── Auto-restore on startup ── */
 document.addEventListener('DOMContentLoaded',function(){
+  // Priority 1: embedded data (shared file)
+  if(window.__EMBEDDED_DATA__){
+    var ed = window.__EMBEDDED_DATA__;
+    document.getElementById('h-fname').textContent = ed.fname||'compartilhado';
+    ALL = ed.all||[];
+    // Rebuild Andamento pills
+    var ands=[...new Set(ALL.map(function(r){return r.and;}).filter(Boolean))].sort();
+    var andBar=document.getElementById('fb-and');
+    andBar.innerHTML='<button class="fp on" data-g="and" data-v="">Todos</button>';
+    ands.forEach(function(a){var b=document.createElement('button');b.className='fp';b.setAttribute('data-g','and');b.setAttribute('data-v',a);b.textContent=a;andBar.appendChild(b);});
+    attachPillListeners(); attachSearch(); attachQtyFilter(); attachTableSort();
+    var today=new Date();
+    document.getElementById('h-ref').textContent=today.getDate().toString().padStart(2,'0')+'/'+(today.getMonth()+1).toString().padStart(2,'0')+'/'+today.getFullYear();
+    document.getElementById('empty-state').style.display='none';
+    document.getElementById('main-content').style.display='block';
+    document.getElementById('share-btn').style.display='flex';
+    // Restore dates (they become strings after JSON serialization)
+    ALL.forEach(function(r){
+      if(r.dataUpd && typeof r.dataUpd==='string') r.dataUpd=new Date(r.dataUpd);
+      if(r.dataDt  && typeof r.dataDt ==='string') r.dataDt =new Date(r.dataDt);
+    });
+    showCacheBadge(ed.ts);
+    applyFilters();
+    showToast('✓ Versão compartilhada carregada · '+new Date(ed.ts).toLocaleString('pt-BR'),4000);
+    return;
+  }
+  // Priority 2: localStorage cache
   tryLoadCache();
 });
 
@@ -638,6 +677,7 @@ function processData(rows, fname, fromCache){
 
   document.getElementById('empty-state').style.display='none';
   document.getElementById('main-content').style.display='block';
+  document.getElementById('share-btn').style.display='flex';
   applyFilters();
 }
 
@@ -731,6 +771,7 @@ function renderCharts(list){
   renderAgingChart(list);
   renderResp(list);
   renderMotivoDonut(list);
+  renderMonthlyChart(list);
 }
 
 /* Comparison: QNTD vs Falta Separar per seller (top 15 by qntd) */
@@ -956,6 +997,66 @@ function updateFooter(list){
   var ref=today.getDate().toString().padStart(2,'0')+'/'+(today.getMonth()+1).toString().padStart(2,'0')+'/'+today.getFullYear();
   document.getElementById('dash-foot').textContent=
     'SHOPEE · RTS INHOUSE PE · '+ref+' · '+list.length+' CASOS · FALTA SEP.: '+fmt(list.reduce(function(s,r){return s+r.falta;},0))+' UN. · QNTD TOTAL: '+fmt(list.reduce(function(s,r){return s+r.qntd;},0))+' UN.';
+}
+
+/* Evolução mensal */
+function renderMonthlyChart(list){
+  var m={};
+  list.forEach(function(r){
+    var dt = r.dataUpd || r.dataDt;
+    if(!dt) return;
+    var key = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    if(!m[key]) m[key]={qntd:0,sep:0,falta:0};
+    m[key].qntd  += r.qntd;
+    m[key].sep   += r.sep;
+    m[key].falta += r.falta;
+  });
+  var keys = Object.keys(m).sort();
+  var labels = keys.map(function(k){
+    var p=k.split('-'); var mNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return mNames[+p[1]-1]+'/'+p[0].slice(2);
+  });
+  destroyChart('monthly');
+  charts['monthly']=new Chart(document.getElementById('monthly-chart'),{
+    type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'Solicitadas (QNTD)',data:keys.map(function(k){return m[k].qntd;}),
+        backgroundColor:'rgba(59,130,246,.75)',borderRadius:4,borderSkipped:false,order:1},
+      {label:'Já Separadas',data:keys.map(function(k){return m[k].sep;}),
+        backgroundColor:'rgba(16,185,129,.75)',borderRadius:4,borderSkipped:false,order:2},
+      {label:'Falta Separar',data:keys.map(function(k){return m[k].falta;}),
+        type:'line',borderColor:'#EE4D2D',backgroundColor:'rgba(238,77,45,.12)',
+        pointBackgroundColor:'#EE4D2D',pointRadius:4,pointHoverRadius:6,
+        fill:true,tension:.35,order:0},
+    ]},
+    options:{...C_SCALE,
+      plugins:{legend:{display:true,position:'top',labels:{color:'#8fa8ca',font:{size:10},boxWidth:10,padding:14}},
+        tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ' '+ctx.dataset.label+': '+fmt(ctx.raw);}}}},
+      scales:{
+        x:{ticks:{color:'#46607f',font:{size:10}},grid:{display:false},border:{display:false}},
+        y:{ticks:{color:'#46607f',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},border:{display:false}}
+      }
+    }
+  });
+}
+
+/* ══════════ EXPORTAR VERSÃO COMPARTILHÁVEL ══════════ */
+function exportSharedFile(){
+  if(!ALL||ALL.length===0){showToast('Nenhum dado para exportar.');return;}
+  var html = document.documentElement.outerHTML;
+  // Remove any previous embedded data block
+  html = html.replace(/<script id="__embedded__">[\s\S]*?<\/script>/,'');
+  // Inject embedded data right before </body>
+  var dataScript = '<script id="__embedded__">window.__EMBEDDED_DATA__='+JSON.stringify({all:ALL,fname:document.getElementById('h-fname').textContent,ts:Date.now()})+';<\/script>';
+  html = html.replace('</body>', dataScript+'</body>');
+  var blob = new Blob([html],{type:'text/html;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  var today = new Date();
+  a.download = 'rts_dashboard_'+today.getFullYear()+String(today.getMonth()+1).padStart(2,'0')+String(today.getDate()).padStart(2,'0')+'.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('✓ Arquivo compartilhável gerado!', 3000);
 }
 
 /* ══════════ HELPERS ══════════ */
