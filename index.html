@@ -21,7 +21,7 @@
 html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--bg0);color:var(--t1);font-size:14px;line-height:1.5}
 
 /* ─── UPLOAD SCREEN ─── */
-#up{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:var(--bg0)}
+#up{display:none !important}
 .logo-pill{display:flex;align-items:center;gap:9px;background:var(--or);padding:6px 14px;border-radius:9px}
 .logo-pill svg{width:22px;height:22px}
 .logo-pill span{font-size:20px;font-weight:700;color:#fff;font-style:italic;letter-spacing:-.3px}
@@ -41,7 +41,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .dz-hint b{color:var(--t2)}
 
 /* ─── DASHBOARD ─── */
-#dash{display:none;min-height:100vh}
+#dash{display:block;min-height:100vh}
 
 /* ─── HEADER ─── */
 .hdr{
@@ -259,7 +259,20 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
     </div>
   </div>
 
-  <div class="main">
+  <!-- EMPTY STATE -->
+  <div id="empty-state" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:80px 20px;text-align:center">
+    <div style="width:56px;height:56px;background:var(--bg3);border-radius:14px;display:flex;align-items:center;justify-content:center;border:1px solid var(--ln2)">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--or)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V8M12 8l-3 3M12 8l3 3"/><path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/>
+      </svg>
+    </div>
+    <div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Nenhuma base carregada</div>
+      <div style="font-size:12px;color:var(--t3)">Use o botão <strong style="color:var(--t2)">↑ Atualizar CSV</strong> no canto superior direito para carregar os dados.</div>
+    </div>
+  </div>
+
+  <div class="main" id="main-content" style="display:none">
 
     <!-- FILTROS -->
     <div class="slbl">Filtros</div>
@@ -422,7 +435,7 @@ footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:
       </div>
     </div>
 
-  </div>
+  </div><!-- /main-content -->
   <footer id="dash-foot">SHOPEE · RTS INHOUSE PE · DASHBOARD</footer>
 </div>
 
@@ -623,9 +636,9 @@ function processData(rows, fname, fromCache){
   document.getElementById('h-ref').textContent =
     today.getDate().toString().padStart(2,'0')+'/'+(today.getMonth()+1).toString().padStart(2,'0')+'/'+today.getFullYear();
 
+  document.getElementById('empty-state').style.display='none';
+  document.getElementById('main-content').style.display='block';
   applyFilters();
-  document.getElementById('up').style.display='none';
-  document.getElementById('dash').style.display='block';
 }
 
 /* ══════════ PILLS / SEARCH / QTY ══════════ */
