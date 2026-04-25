@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard RTS · Shopee</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET & BASE ─── */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg0:#080c14;--bg1:#0f1623;--bg2:#141d2e;--bg3:#1a2540;--bg4:#1f2d4a;
+  --ln:#1e2f4a;--ln2:#283d5c;
+  --t1:#e8edf8;--t2:#8fa8ca;--t3:#46607f;
+  --or:#EE4D2D;--or2:#ff6b47;--or3:#ff8c63;
+  --grn:#10b981;--amb:#f59e0b;--blu:#3b82f6;--red:#ef4444;--pur:#8b5cf6;
+  --r:10px;--r2:14px;--r3:20px;
+}
+html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--bg0);color:var(--t1);font-size:14px;line-height:1.5}
+
+/* ─── UPLOAD SCREEN ─── */
+#up{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:var(--bg0)}
+.logo-pill{display:flex;align-items:center;gap:9px;background:var(--or);padding:6px 14px;border-radius:9px}
+.logo-pill svg{width:22px;height:22px}
+.logo-pill span{font-size:20px;font-weight:700;color:#fff;font-style:italic;letter-spacing:-.3px}
+.brand-sub{font-size:12px;color:var(--t2);font-weight:500;letter-spacing:.04em}
+.dropzone{
+  width:460px;max-width:92vw;background:var(--bg2);border:1.5px dashed var(--ln2);
+  border-radius:22px;padding:48px 44px;text-align:center;cursor:pointer;
+  transition:border-color .2s,background .2s;position:relative;
+}
+.dropzone:hover,.dropzone.over{border-color:var(--or);background:rgba(238,77,45,.05)}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{width:54px;height:54px;background:var(--bg3);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px}
+.dz-icon svg{width:26px;height:26px;stroke:var(--or)}
+.dz-h{font-size:16px;font-weight:600;margin-bottom:8px}
+.dz-p{font-size:12px;color:var(--t3);line-height:1.7}
+.dz-hint{margin-top:22px;font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;line-height:1.8}
+.dz-hint b{color:var(--t2)}
+
+/* ─── DASHBOARD ─── */
+#dash{display:none;min-height:100vh}
+
+/* ─── HEADER ─── */
+.hdr{
+  position:sticky;top:0;z-index:200;
+  background:rgba(8,12,20,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--ln);height:54px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+}
+.hdr-l{display:flex;align-items:center;gap:12px}
+.hdr-div{width:1px;height:18px;background:var(--ln2)}
+.hdr-title{font-size:12px;color:var(--t2);font-weight:500}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.hdr-fname{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-badge{font-size:10px;font-family:'JetBrains Mono',monospace;padding:3px 9px;border-radius:20px;background:var(--bg3);border:1px solid var(--ln2);color:var(--t2)}
+.upload-btn{position:relative;overflow:hidden;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:5px 12px;border-radius:7px;background:var(--or);border:none;color:#fff;cursor:pointer;transition:opacity .15s;white-space:nowrap}
+.upload-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.upload-btn:hover{opacity:.88}
+
+/* ─── MAIN ─── */
+.main{max-width:1420px;margin:0 auto;padding:22px 20px 56px}
+
+/* ─── SECTION LABEL ─── */
+.slbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:var(--or);display:flex;align-items:center;gap:10px;margin:24px 0 12px}
+.slbl::after{content:'';flex:1;height:1px;background:var(--ln)}
+
+/* ─── FILTER PANEL ─── */
+.fbox{background:var(--bg2);border:1px solid var(--ln);border-radius:var(--r2);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.frow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.flbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--t3);min-width:82px;white-space:nowrap}
+.fpills{display:flex;gap:6px;flex-wrap:wrap}
+.fp{font-size:11px;font-weight:500;padding:3px 11px;border-radius:20px;cursor:pointer;border:1px solid var(--ln2);background:transparent;color:var(--t2);transition:all .15s;white-space:nowrap}
+.fp:hover{border-color:var(--or2);color:var(--t1)}
+.fp.on{background:var(--or);border-color:var(--or);color:#fff;font-weight:600}
+/* search */
+.srch{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--ln2);border-radius:7px;padding:5px 10px;transition:border-color .15s;flex:1;max-width:300px}
+.srch:focus-within{border-color:var(--or)}
+.srch input{background:none;border:none;outline:none;color:var(--t1);font-size:12px;font-family:'Inter',sans-serif;width:100%}
+.srch input::placeholder{color:var(--t3)}
+.srch-clr{background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;line-height:1;transition:color .15s}
+.srch-clr:hover{color:var(--t1)}
+/* qty range */
+.qrange{display:flex;align-items:center;gap:8px}
+.qrange input[type=number]{width:72px;background:var(--bg3);border:1px solid var(--ln2);border-radius:6px;padding:4px 8px;color:var(--t1);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;text-align:center}
+.qrange input:focus{border-color:var(--or)}
+.qrange span{color:var(--t3);font-size:11px}
+.fresult{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-left:auto}
+
+/* ─── KPI STRIP ─── */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}
+.kpi{background:var(--bg2);border:1px solid var(--ln);border-radius:var(--r2);padding:18px 20px 14px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px;border-radius:2px 2px 0 0}
+.kpi.c-or::before{background:var(--or)} .kpi.c-grn::before{background:var(--grn)}
+.kpi.c-amb::before{background:var(--amb)} .kpi.c-blu::before{background:var(--blu)} .kpi.c-pur::before{background:var(--pur)}
+.kpi-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--t3);margin-bottom:8px}
+.kpi-val{font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.kpi.c-or .kpi-val{color:var(--or)} .kpi.c-grn .kpi-val{color:var(--grn)}
+.kpi.c-amb .kpi-val{color:var(--amb)} .kpi.c-blu .kpi-val{color:var(--blu)} .kpi.c-pur .kpi-val{color:var(--pur)}
+.kpi-sub{font-size:10px;color:var(--t3);margin-top:5px;line-height:1.5}
+.kpi-prog{margin-top:10px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+.kpi-prog-fill{height:100%;border-radius:2px;transition:width .5s}
+
+/* ─── CARDS ─── */
+.card{background:var(--bg2);border:1px solid var(--ln);border-radius:var(--r2);padding:18px 20px}
+.card-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-bottom:3px}
+.card-s{font-size:11px;color:var(--t3);margin-bottom:14px}
+
+/* ─── GRIDS ─── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.g7-5{display:grid;grid-template-columns:7fr 5fr;gap:12px}
+.g6-4{display:grid;grid-template-columns:6fr 4fr;gap:12px}
+.gcol{display:flex;flex-direction:column;gap:12px}
+.ch{position:relative}
+
+/* ─── AGING BOXES ─── */
+.agrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.agb{border-radius:var(--r);padding:14px 15px;border:1px solid}
+.agb.r45{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.22)}
+.agb.a30{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.22)}
+.agb.b15{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.22)}
+.agb.g0 {background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.22)}
+.agb-n{font-size:28px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.agb.r45 .agb-n{color:var(--red)} .agb.a30 .agb-n{color:var(--amb)}
+.agb.b15 .agb-n{color:var(--blu)} .agb.g0  .agb-n{color:var(--grn)}
+.agb-l{font-size:10px;font-weight:600;margin-top:4px}
+.agb.r45 .agb-l{color:var(--red)} .agb.a30 .agb-l{color:var(--amb)}
+.agb.b15 .agb-l{color:var(--blu)} .agb.g0  .agb-l{color:var(--grn)}
+.agb-s{font-size:10px;color:var(--t3);margin-top:2px}
+
+/* ─── TAGS ─── */
+.tag{display:inline-flex;align-items:center;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.t-grn{background:rgba(16,185,129,.15);color:#34d399}
+.t-amb{background:rgba(245,158,11,.15);color:#fbbf24}
+.t-red{background:rgba(239,68,68,.15);color:#f87171}
+.t-blu{background:rgba(59,130,246,.15);color:#60a5fa}
+.t-pur{background:rgba(139,92,246,.15);color:#a78bfa}
+.t-gry{background:rgba(70,96,127,.15);color:var(--t3)}
+.t-or {background:rgba(238,77,45,.15);color:var(--or2)}
+
+/* ─── TABLE ─── */
+.tw{overflow-x:auto;max-height:520px;overflow-y:auto}
+.tw::-webkit-scrollbar{width:5px;height:5px}
+.tw::-webkit-scrollbar-track{background:var(--bg3)}
+.tw::-webkit-scrollbar-thumb{background:var(--ln2);border-radius:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{
+  background:var(--bg3);color:var(--t3);font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.1em;padding:9px 10px;
+  text-align:left;border-bottom:1px solid var(--ln);white-space:nowrap;
+  position:sticky;top:0;z-index:10;cursor:pointer;user-select:none;
+}
+thead th:hover{color:var(--t1)}
+thead th.sort-asc::after{content:' ▲';font-size:8px}
+thead th.sort-desc::after{content:' ▼';font-size:8px}
+th.r,td.r{text-align:right}
+tbody tr{border-bottom:1px solid var(--ln)}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+tbody td{padding:7px 10px;vertical-align:middle}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+.rnk{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.rk1{background:#c9a227;color:#080c14}.rk2{background:#8fa8ca;color:#080c14}.rk3{background:#8b5544;color:#fff}.rkn{background:var(--bg4);color:var(--t3)}
+tfoot td{background:var(--bg3);border-top:1px solid var(--ln2);font-weight:600;padding:8px 10px;font-size:12px}
+/* progress mini bar */
+.pbar{height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;width:70px;display:inline-block;vertical-align:middle}
+.pbar-fill{height:100%;border-radius:3px;background:var(--grn)}
+.pbar-fill.warn{background:var(--amb)}
+.pbar-fill.crit{background:var(--or)}
+
+/* ─── LEGEND ROW ─── */
+.leg-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--ln)}
+.leg-row:last-child{border-bottom:none}
+.leg-sq{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.leg-nm{font-size:11px;color:var(--t2);flex:1}
+.leg-v{font-size:11px;font-weight:600;font-family:'JetBrains Mono',monospace}
+
+/* ─── RESP ROW ─── */
+.rr{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--ln)}
+.rr:last-child{border-bottom:none}
+.av{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+.rr-nm{font-size:12px;color:var(--t2);flex:1}
+.rr-trk{flex:0 0 80px;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.rr-fill{height:100%;border-radius:3px}
+.rr-cnt{font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;min-width:22px;text-align:right}
+
+/* ─── NO DATA ─── */
+.nodata{text-align:center;padding:40px;color:var(--t3);font-size:12px}
+
+/* ─── FOOTER ─── */
+footer{text-align:center;font-size:10px;color:var(--t3);padding:14px;border-top:1px solid var(--ln);font-family:'JetBrains Mono',monospace;letter-spacing:.05em}
+</style>
+</head>
+<body>
+
+<!-- ══════════ UPLOAD SCREEN ══════════ -->
+<div id="up">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+    <div class="logo-pill">
+      <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="6" fill="rgba(255,255,255,.2)"/><path d="M8 17h24l-2.4 13.5H10.4L8 17z" fill="white"/><path d="M14.5 17c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>
+      <span>shopee</span>
+    </div>
+    <span class="brand-sub">Returns to Seller · Dashboard Operacional</span>
+  </div>
+  <div class="dropzone" id="dz">
+    <input type="file" id="fi" accept=".csv,.txt">
+    <div class="dz-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V8M12 8l-3 3M12 8l3 3"/>
+        <path d="M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2"/>
+      </svg>
+    </div>
+    <div class="dz-h">Arraste o CSV ou clique para selecionar</div>
+    <div class="dz-p">Os dados são processados localmente no seu navegador.<br>Nenhuma informação é enviada a servidores externos.</div>
+    <div class="dz-hint">
+      <b>Colunas esperadas:</b><br>
+      DATA · SHOP NAME · QNTD PEÇAS · DATA UPDATE<br>
+      Falta Separar · ANDAMENTO PE · STATUS · Merchant
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DASHBOARD ══════════ -->
+<div id="dash">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-l">
+      <div class="logo-pill" style="padding:4px 10px">
+        <svg viewBox="0 0 40 40" fill="none" style="width:16px;height:16px"><rect width="40" height="40" rx="6" fill="rgba(255,255,255,.2)"/><path d="M8 17h24l-2.4 13.5H10.4L8 17z" fill="white"/><path d="M14.5 17c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>
+        <span style="font-size:15px;font-weight:700;color:#fff;font-style:italic">shopee</span>
+      </div>
+      <div class="hdr-div"></div>
+      <span class="hdr-title">Returns to Seller · Inhouse PE</span>
+    </div>
+    <div class="hdr-r">
+      <span class="hdr-fname" id="h-fname">—</span>
+      <span class="hdr-badge" id="h-ref">—</span>
+      <label class="upload-btn">
+        <input type="file" id="ri" accept=".csv,.txt">
+        ↑ Atualizar CSV
+      </label>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- FILTROS -->
+    <div class="slbl">Filtros</div>
+    <div class="fbox">
+      <div class="frow">
+        <span class="flbl">Status</span>
+        <div class="fpills" id="fb-status">
+          <button class="fp on" data-g="status" data-v="">Todos</button>
+          <button class="fp" data-g="status" data-v="Pendente">Pendente</button>
+          <button class="fp" data-g="status" data-v="Resolvido">Resolvido</button>
+        </div>
+      </div>
+      <div class="frow">
+        <span class="flbl">Andamento PE</span>
+        <div class="fpills" id="fb-and">
+          <button class="fp on" data-g="and" data-v="">Todos</button>
+        </div>
+      </div>
+      <div class="frow">
+        <span class="flbl">Seller</span>
+        <div class="srch" id="srch-wrap">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#46607f" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="s-seller" placeholder="Buscar seller…">
+          <button class="srch-clr" id="s-clr" style="display:none">✕</button>
+        </div>
+        <span class="flbl" style="margin-left:20px">Quantidade (QNTD Peças)</span>
+        <div class="qrange">
+          <input type="number" id="q-min" placeholder="Mín" min="0">
+          <span>—</span>
+          <input type="number" id="q-max" placeholder="Máx" min="0">
+        </div>
+        <span class="fresult" id="f-count"></span>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="slbl">Visão Geral</div>
+    <div class="kpis">
+      <div class="kpi c-or">
+        <div class="kpi-lbl">Total de Casos</div>
+        <div class="kpi-val" id="k-total">—</div>
+        <div class="kpi-sub" id="k-total-s"></div>
+      </div>
+      <div class="kpi c-amb">
+        <div class="kpi-lbl">Pendentes</div>
+        <div class="kpi-val" id="k-pend">—</div>
+        <div class="kpi-sub" id="k-pend-s"></div>
+      </div>
+      <div class="kpi c-grn">
+        <div class="kpi-lbl">Resolvidos</div>
+        <div class="kpi-val" id="k-resol">—</div>
+        <div class="kpi-sub" id="k-resol-s"></div>
+      </div>
+      <div class="kpi c-red" style="--c:var(--red)">
+        <div class="kpi-lbl">Falta Separar (un.)</div>
+        <div class="kpi-val" id="k-falta" style="color:var(--red)">—</div>
+        <div class="kpi-sub" id="k-falta-s"></div>
+        <div class="kpi-prog"><div class="kpi-prog-fill" id="k-falta-p" style="background:var(--red)"></div></div>
+      </div>
+      <div class="kpi c-blu">
+        <div class="kpi-lbl">QNTD Total (un.)</div>
+        <div class="kpi-val" id="k-qntd">—</div>
+        <div class="kpi-sub" id="k-qntd-s"></div>
+        <div class="kpi-prog"><div class="kpi-prog-fill" id="k-qntd-p" style="background:var(--blu)"></div></div>
+      </div>
+    </div>
+
+    <!-- CHARTS ROW 1: Comparação QNTD × Falta + Status donut -->
+    <div class="slbl">QNTD Peças × Falta Separar · Por Seller</div>
+    <div class="g7-5">
+      <div class="card">
+        <div class="card-t">Comparativo — QNTD Solicitada vs Falta Separar (top sellers)</div>
+        <div class="card-s">Azul = total solicitado · Laranja = ainda falta separar · diferença = já separado</div>
+        <div class="ch" style="height:310px">
+          <canvas id="cmp-chart" role="img" aria-label="Comparativo QNTD vs Falta Separar por seller">Comparativo QNTD vs Falta por seller.</canvas>
+        </div>
+      </div>
+      <div class="gcol">
+        <!-- Status donut -->
+        <div class="card" style="flex:1">
+          <div class="card-t">Status dos Casos</div>
+          <div class="card-s" id="status-sub"></div>
+          <div class="ch" style="height:150px">
+            <canvas id="status-chart" role="img" aria-label="Distribuição de status">Status dos casos.</canvas>
+          </div>
+          <div id="status-leg" style="margin-top:10px"></div>
+        </div>
+        <!-- Andamento donut -->
+        <div class="card" style="flex:1">
+          <div class="card-t">Andamento PE</div>
+          <div class="card-s">Distribuição operacional dos casos</div>
+          <div class="ch" style="height:140px">
+            <canvas id="and-chart" role="img" aria-label="Andamento PE">Andamento PE.</canvas>
+          </div>
+          <div id="and-leg" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AGING -->
+    <div class="slbl">Aging · Tempo Sem Atualização (DATA UPDATE)</div>
+    <div class="g6-4">
+      <div class="card">
+        <div class="card-t">Aging por Seller — dias desde última atualização</div>
+        <div class="card-s">Cor indica nível de urgência · hover para detalhes</div>
+        <div class="agrow" id="ag-boxes"></div>
+        <div class="ch" id="aging-wrap" style="height:280px">
+          <canvas id="aging-chart" role="img" aria-label="Aging por seller">Aging por seller.</canvas>
+        </div>
+      </div>
+      <div class="gcol">
+        <!-- Responsáveis -->
+        <div class="card" style="flex:1">
+          <div class="card-t">Responsáveis PE</div>
+          <div class="card-s">Casos pendentes por responsável</div>
+          <div id="resp-list"></div>
+        </div>
+        <!-- Motivo -->
+        <div class="card" style="flex:1">
+          <div class="card-t">Motivo do Retorno</div>
+          <div class="card-s">Distribuição dos casos</div>
+          <div class="ch" style="height:130px">
+            <canvas id="mot-chart" role="img" aria-label="Motivos">Motivos.</canvas>
+          </div>
+          <div id="mot-leg" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABELA -->
+    <div class="slbl">Tabela Detalhada · Todos os Casos</div>
+    <div class="card" style="padding:18px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="card-t">Ranking por Falta Separar</div>
+          <div class="card-s">Clique no cabeçalho para ordenar</div>
+        </div>
+        <div style="display:flex;gap:8px" id="tbl-totals"></div>
+      </div>
+      <div class="tw">
+        <table id="main-table">
+          <thead>
+            <tr>
+              <th style="width:28px">#</th>
+              <th data-col="SHOP NAME">Seller</th>
+              <th data-col="STATUS" class="r">Status</th>
+              <th data-col="QNTD PEÇAS" class="r">QNTD Peças</th>
+              <th data-col="falta" class="r">Falta Separar</th>
+              <th data-col="sep" class="r">Já Separado</th>
+              <th style="width:90px">Progresso</th>
+              <th data-col="aging" class="r">Aging (dias)</th>
+              <th data-col="ANDAMENTO PE">Andamento PE</th>
+              <th data-col="MOTIVO">Motivo</th>
+              <th>Responsável</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body"></tbody>
+          <tfoot id="tbl-foot"></tfoot>
+        </table>
+      </div>
+    </div>
+
+  </div>
+  <footer id="dash-foot">SHOPEE · RTS INHOUSE PE · DASHBOARD</footer>
+</div>
+
+<script>
+/* ══════════ GLOBALS ══════════ */
+var CI = {}, ALL = [], _fStatus='', _fAnd='', _fSeller='', _fQmin=null, _fQmax=null;
+var _sortCol='falta', _sortDir=-1;
+var charts = {};
+var TODAY = new Date(); TODAY.setHours(0,0,0,0);
+
+var RESP_COLORS = {'Ruan':'#3b82f6','Kimberly':'#10b981','Isabel':'#8b5cf6','Fernanda':'#d97706','Renata Dias':'#ef4444'};
+var AND_COLORS  = ['#3b82f6','#d97706','#ef4444','#10b981','#8b5cf6','#ee4d2d','#46607f','#9ca3af','#06b6d4','#ec4899'];
+var MOT_COLORS  = ['#ee4d2d','#d97706','#3b82f6','#8b5cf6','#10b981','#ef4444','#9ca3af','#06b6d4'];
+
+/* ══════════ UPLOAD ══════════ */
+var dz=document.getElementById('dz'), fi=document.getElementById('fi'), ri=document.getElementById('ri');
+dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',function(){dz.classList.remove('over');});
+dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fi.addEventListener('change',function(){if(this.files[0])loadFile(this.files[0]);});
+ri.addEventListener('change',function(){if(this.files[0])loadFile(this.files[0]);});
+
+function loadFile(f){
+  document.getElementById('h-fname').textContent = f.name;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    Papa.parse(e.target.result,{
+      header:true, skipEmptyLines:true, delimiter:';',
+      complete:function(r){processData(r.data,f.name);}
+    });
+  };
+  reader.readAsText(f,'latin1');
+}
+
+/* ══════════ PROCESS ══════════ */
+function processData(rows, fname){
+  var norm = rows.map(function(row){
+    var r={};
+    Object.keys(row).forEach(function(k){r[k.trim().replace(/\n/g,' ')]=String(row[k]||'').trim();});
+    return r;
+  });
+
+  var s0 = norm[0]||{}, ks = Object.keys(s0);
+  function col(pat){ return ks.find(function(k){return k.toLowerCase().includes(pat.toLowerCase());})||''; }
+
+  CI = {
+    data:    col('DATA')&&!col('UPDATE')?col('DATA'):'DATA',
+    casos:   col('CASOS'),
+    sla:     col('SLA'),
+    shop:    col('SHOP NAME')||col('SHOP'),
+    motivo:  col('MOTIVO'),
+    qntd:    col('QNTD'),
+    dataUpd: col('UPDATE'),
+    resp:    col('RESP')||col('PEND'),
+    falta:   col('Falta')||col('SEPARAR')||col('falta'),
+    and:     col('ANDAMENTO'),
+    status:  col('STATUS'),
+    merch:   col('Merchant')||col('MERCHANT'),
+  };
+  // fix DATA vs DATA UPDATE ambiguity
+  if(CI.data === CI.dataUpd){
+    CI.data = ks.find(function(k){return k==='DATA';})||CI.data;
+    CI.dataUpd = ks.find(function(k){return k.includes('UPDATE');})||CI.dataUpd;
+  }
+
+  function n(v){return parseFloat((v||'').replace(',','.'))||0;}
+  function parseDt(s){
+    if(!s||s==='-')return null;
+    var p=s.split(/[\/\-]/);
+    if(p.length===3){
+      var d; 
+      if(p[0].length===4) d=new Date(+p[0],+p[1]-1,+p[2]);
+      else d=new Date(+p[2],+p[1]-1,+p[0]);
+      if(!isNaN(d)) return d;
+    }
+    var d2=new Date(s); return isNaN(d2)?null:d2;
+  }
+
+  ALL = norm.map(function(r){
+    var qntd  = n(r[CI.qntd]);
+    var falta = n(r[CI.falta]);
+    var sep   = Math.max(0, qntd - falta);
+    var pct   = qntd>0 ? sep/qntd : 0;
+    var updDt = parseDt(r[CI.dataUpd]);
+    var datDt = parseDt(r[CI.data]);
+    var ref   = updDt || datDt;
+    var aging = ref ? Math.round((TODAY-ref)/86400000) : null;
+    return {
+      shop:    (r[CI.shop]||'').replace(/\n/g,' ').trim()||'—',
+      status:  (r[CI.status]||'').trim(),
+      and:     (r[CI.and]||'').trim(),
+      motivo:  (r[CI.motivo]||'').trim(),
+      resp:    (r[CI.resp]||'').replace(/\n/g,' ').trim(),
+      merch:   r[CI.merch]||'',
+      qntd:    qntd,
+      falta:   falta,
+      sep:     sep,
+      pct:     pct,
+      aging:   aging,
+      dataUpd: updDt,
+      dataDt:  datDt,
+    };
+  }).filter(function(r){return r.shop&&r.shop!=='—'||r.qntd>0||r.falta>0;});
+
+  // Build Andamento pills dynamically
+  var ands = [...new Set(ALL.map(function(r){return r.and;}).filter(Boolean))].sort();
+  var andBar = document.getElementById('fb-and');
+  andBar.innerHTML = '<button class="fp on" data-g="and" data-v="">Todos</button>';
+  ands.forEach(function(a){
+    var b=document.createElement('button');
+    b.className='fp'; b.setAttribute('data-g','and'); b.setAttribute('data-v',a);
+    b.textContent=a; andBar.appendChild(b);
+  });
+
+  attachPillListeners();
+  attachSearch();
+  attachQtyFilter();
+  attachTableSort();
+
+  // ref date
+  var today = new Date();
+  document.getElementById('h-ref').textContent =
+    today.getDate().toString().padStart(2,'0')+'/'+(today.getMonth()+1).toString().padStart(2,'0')+'/'+today.getFullYear();
+
+  applyFilters();
+  document.getElementById('up').style.display='none';
+  document.getElementById('dash').style.display='block';
+}
+
+/* ══════════ PILLS / SEARCH / QTY ══════════ */
+function attachPillListeners(){
+  document.querySelectorAll('.fp[data-g]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var g=btn.getAttribute('data-g'), v=btn.getAttribute('data-v');
+      document.querySelectorAll('.fp[data-g="'+g+'"]').forEach(function(b){b.classList.remove('on');});
+      btn.classList.add('on');
+      if(g==='status') _fStatus=v;
+      if(g==='and')    _fAnd=v;
+      applyFilters();
+    });
+  });
+}
+function attachSearch(){
+  var inp=document.getElementById('s-seller'), clr=document.getElementById('s-clr');
+  inp.addEventListener('input',function(){
+    _fSeller=inp.value.trim().toLowerCase();
+    clr.style.display=_fSeller?'inline':'none';
+    applyFilters();
+  });
+  clr.addEventListener('click',function(){inp.value='';_fSeller='';clr.style.display='none';applyFilters();});
+}
+function attachQtyFilter(){
+  ['q-min','q-max'].forEach(function(id){
+    document.getElementById(id).addEventListener('input',function(){
+      var mn=document.getElementById('q-min').value;
+      var mx=document.getElementById('q-max').value;
+      _fQmin = mn!==''?+mn:null;
+      _fQmax = mx!==''?+mx:null;
+      applyFilters();
+    });
+  });
+}
+
+/* ══════════ FILTER + RENDER ══════════ */
+function applyFilters(){
+  var list = ALL.filter(function(r){
+    if(_fStatus && r.status!==_fStatus) return false;
+    if(_fAnd    && r.and   !==_fAnd)    return false;
+    if(_fSeller && r.shop.toLowerCase().indexOf(_fSeller)===-1) return false;
+    if(_fQmin!==null && r.qntd<_fQmin) return false;
+    if(_fQmax!==null && r.qntd>_fQmax) return false;
+    return true;
+  });
+
+  document.getElementById('f-count').textContent =
+    list.length===ALL.length ? ALL.length+' casos' : list.length+' de '+ALL.length+' casos';
+
+  renderKPIs(list);
+  renderCharts(list);
+  renderTable(list);
+  updateFooter(list);
+}
+
+/* ══════════ KPIs ══════════ */
+function renderKPIs(list){
+  var pend   = list.filter(function(r){return r.status==='Pendente';});
+  var resol  = list.filter(function(r){return r.status!=='Pendente';});
+  var tQntd  = list.reduce(function(s,r){return s+r.qntd;},0);
+  var tFalta = list.reduce(function(s,r){return s+r.falta;},0);
+  var maxAg  = list.filter(function(r){return r.aging!==null&&r.status==='Pendente';})
+                   .reduce(function(m,r){return Math.max(m,r.aging);},0);
+
+  set('k-total', fmt(list.length));
+  set('k-total-s', resol.length+' resolvidos · '+pend.length+' pendentes');
+  set('k-pend',  fmt(pend.length));
+  set('k-pend-s','caso mais crítico: '+maxAg+'d sem atualização');
+  set('k-resol', fmt(resol.length));
+  set('k-resol-s', tQntd>0?Math.round(resol.length/list.length*100)+'% de conclusão':'');
+  set('k-falta', fmt(tFalta));
+  set('k-falta-s','unidades ainda a devolver');
+  var pFalta = tQntd>0 ? tFalta/tQntd : 0;
+  document.getElementById('k-falta-p').style.width = Math.round(pFalta*100)+'%';
+  set('k-qntd',  fmt(tQntd));
+  set('k-qntd-s','total de peças solicitadas');
+  var pSep = tQntd>0 ? (tQntd-tFalta)/tQntd : 0;
+  document.getElementById('k-qntd-p').style.width = Math.round(pSep*100)+'%';
+}
+
+/* ══════════ CHARTS ══════════ */
+var C_SCALE={responsive:true,maintainAspectRatio:false};
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+function renderCharts(list){
+  renderCompare(list);
+  renderStatusDonut(list);
+  renderAndDonut(list);
+  renderAgingChart(list);
+  renderResp(list);
+  renderMotivoDonut(list);
+}
+
+/* Comparison: QNTD vs Falta Separar per seller (top 15 by qntd) */
+function renderCompare(list){
+  var agg={};
+  list.forEach(function(r){
+    if(!agg[r.shop]) agg[r.shop]={shop:r.shop,qntd:0,falta:0};
+    agg[r.shop].qntd+=r.qntd; agg[r.shop].falta+=r.falta;
+  });
+  var sorted=Object.values(agg).sort(function(a,b){return b.qntd-a.qntd;}).slice(0,18);
+  var labels=sorted.map(function(s){return s.shop.length>16?s.shop.slice(0,14)+'…':s.shop;});
+  var dQ=sorted.map(function(s){return s.qntd;});
+  var dF=sorted.map(function(s){return s.falta;});
+  var dS=sorted.map(function(s){return Math.max(0,s.qntd-s.falta);});
+
+  destroyChart('cmp');
+  charts['cmp']=new Chart(document.getElementById('cmp-chart'),{
+    type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'Já Separado',data:dS,backgroundColor:'rgba(16,185,129,.7)',borderRadius:3,stack:'s'},
+      {label:'Falta Separar',data:dF,backgroundColor:'rgba(238,77,45,.85)',borderRadius:0,stack:'s'},
+    ]},
+    options:{...C_SCALE,
+      plugins:{legend:{display:true,position:'top',labels:{color:'#8fa8ca',font:{size:10},boxWidth:10,padding:14}},
+        tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return ' '+ctx.dataset.label+': '+fmt(ctx.raw);}}}},
+      scales:{
+        x:{ticks:{color:'#46607f',font:{size:9},maxRotation:38},grid:{display:false},border:{display:false},stacked:true},
+        y:{ticks:{color:'#46607f',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},border:{display:false},stacked:true}
+      }
+    }
+  });
+}
+
+/* Status donut */
+function renderStatusDonut(list){
+  var pend=list.filter(function(r){return r.status==='Pendente';}).length;
+  var resol=list.length-pend;
+  set('status-sub',pend+' pendentes · '+resol+' resolvidos');
+  destroyChart('st');
+  charts['st']=new Chart(document.getElementById('status-chart'),{
+    type:'doughnut',
+    data:{labels:['Pendente','Resolvido'],datasets:[{data:[pend,resol],
+      backgroundColor:['#f59e0b','#10b981'],borderColor:'#141d2e',borderWidth:3,hoverBorderWidth:4}]},
+    options:{...C_SCALE,cutout:'68%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){return ' '+ctx.label+': '+ctx.raw;}}}}}
+  });
+  document.getElementById('status-leg').innerHTML=
+    leg('#f59e0b','Pendente',pend)+leg('#10b981','Resolvido',resol);
+}
+
+/* Andamento donut */
+function renderAndDonut(list){
+  var m={};
+  list.forEach(function(r){m[r.and||'—']=(m[r.and||'—']||0)+1;});
+  var sorted=Object.entries(m).sort(function(a,b){return b[1]-a[1];});
+  var colors=sorted.map(function(_,i){return AND_COLORS[i%AND_COLORS.length];});
+  destroyChart('and');
+  charts['and']=new Chart(document.getElementById('and-chart'),{
+    type:'doughnut',
+    data:{labels:sorted.map(function(e){return e[0];}),datasets:[{data:sorted.map(function(e){return e[1];}),
+      backgroundColor:colors,borderColor:'#141d2e',borderWidth:3,hoverBorderWidth:4}]},
+    options:{...C_SCALE,cutout:'65%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){return ' '+ctx.label+': '+ctx.raw;}}}}}
+  });
+  document.getElementById('and-leg').innerHTML=sorted.slice(0,6).map(function(e,i){
+    return leg(colors[i],e[0],e[1]);
+  }).join('');
+}
+
+/* Aging horizontal bar */
+function renderAgingChart(list){
+  var filt=list.filter(function(r){return r.aging!==null;});
+  var sorted=filt.slice().sort(function(a,b){return b.aging-a.aging;});
+  var labels=sorted.map(function(r){return r.shop.length>20?r.shop.slice(0,18)+'…':r.shop;});
+  var data=sorted.map(function(r){return r.aging;});
+  var colors=data.map(function(d){return d>=45?'#ef4444':d>=30?'#f59e0b':d>=15?'#3b82f6':'#10b981';});
+
+  // Update aging boxes
+  var a45=filt.filter(function(r){return r.aging>=45;}),
+      a30=filt.filter(function(r){return r.aging>=30&&r.aging<45;}),
+      a15=filt.filter(function(r){return r.aging>=15&&r.aging<30;}),
+      a0 =filt.filter(function(r){return r.aging<15;});
+  function fltSum(arr){return arr.reduce(function(s,r){return s+r.falta;},0);}
+  document.getElementById('ag-boxes').innerHTML=
+    agBox('r45','+45 dias',a45.length,fltSum(a45))+
+    agBox('a30','30–44 dias',a30.length,fltSum(a30))+
+    agBox('b15','15–29 dias',a15.length,fltSum(a15))+
+    agBox('g0','0–14 dias',a0.length,fltSum(a0));
+
+  var h=Math.max(280,sorted.length*22+60);
+  document.getElementById('aging-wrap').style.height=h+'px';
+  destroyChart('aging');
+  charts['aging']=new Chart(document.getElementById('aging-chart'),{
+    type:'bar',
+    data:{labels:labels,datasets:[{label:'Dias',data:data,backgroundColor:colors,borderRadius:4,barThickness:14}]},
+    options:{...C_SCALE,indexAxis:'y',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){
+        var r=sorted[ctx.dataIndex];
+        return [' Dias: '+ctx.raw,' Falta: '+fmt(r.falta),' Status: '+r.status];
+      }}}},
+      scales:{
+        x:{ticks:{color:'#46607f',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},border:{display:false}},
+        y:{ticks:{color:'#8fa8ca',font:{size:10}},grid:{display:false},border:{display:false}}
+      }
+    }
+  });
+}
+
+/* Responsáveis */
+function renderResp(list){
+  var pend=list.filter(function(r){return r.status==='Pendente';});
+  var m={};
+  pend.forEach(function(r){var k=r.resp||'Não def.';m[k]=(m[k]||0)+1;});
+  var sorted=Object.entries(m).sort(function(a,b){return b[1]-a[1];});
+  var tot=pend.length||1;
+  var AVCOLORS={'Ruan':'#3b82f6','Kimberly':'#10b981','Isabel':'#8b5cf6','Fernanda':'#d97706','Renata Dias':'#ef4444'};
+  document.getElementById('resp-list').innerHTML=sorted.map(function(e){
+    var col=AVCOLORS[e[0]]||'#46607f';
+    var pct=Math.round(e[1]/tot*100);
+    var ini=e[0].split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
+    return '<div class="rr">'
+      +'<div class="av" style="background:'+col+';color:#080c14">'+ini+'</div>'
+      +'<div class="rr-nm">'+e[0]+'</div>'
+      +'<div class="rr-trk"><div class="rr-fill" style="width:'+pct+'%;background:'+col+'"></div></div>'
+      +'<div class="rr-cnt">'+e[1]+'</div></div>';
+  }).join('')||'<div class="nodata">Sem dados pendentes</div>';
+}
+
+/* Motivo donut */
+function renderMotivoDonut(list){
+  var m={};
+  list.forEach(function(r){if(r.motivo) m[r.motivo]=(m[r.motivo]||0)+1;});
+  var sorted=Object.entries(m).sort(function(a,b){return b[1]-a[1];});
+  var colors=sorted.map(function(_,i){return MOT_COLORS[i%MOT_COLORS.length];});
+  destroyChart('mot');
+  charts['mot']=new Chart(document.getElementById('mot-chart'),{
+    type:'doughnut',
+    data:{labels:sorted.map(function(e){return e[0];}),datasets:[{data:sorted.map(function(e){return e[1];}),
+      backgroundColor:colors,borderColor:'#141d2e',borderWidth:3,hoverBorderWidth:4}]},
+    options:{...C_SCALE,cutout:'63%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){return ' '+ctx.label+': '+ctx.raw;}}}}}
+  });
+  document.getElementById('mot-leg').innerHTML=sorted.slice(0,5).map(function(e,i){
+    return leg(colors[i],e[0],e[1]);
+  }).join('');
+}
+
+/* ══════════ TABLE ══════════ */
+function attachTableSort(){
+  document.querySelectorAll('#main-table thead th[data-col]').forEach(function(th){
+    th.addEventListener('click',function(){
+      var c=th.getAttribute('data-col');
+      if(_sortCol===c) _sortDir*=-1; else{_sortCol=c;_sortDir=-1;}
+      document.querySelectorAll('#main-table thead th').forEach(function(t){t.classList.remove('sort-asc','sort-desc');});
+      th.classList.add(_sortDir===-1?'sort-desc':'sort-asc');
+      applyFilters();
+    });
+  });
+}
+
+var AND_TAG_MAP={
+  'Em separação':'t-blu','Pendente Picking':'t-amb','MT Cancelada':'t-red',
+  'Entregue a SP':'t-grn','Mudança de CNPJ':'t-pur','Em Transito':'t-grn',
+  'Em processo de descarte':'t-red','Sem estoque em PE':'t-gry',
+  'Duplicado':'t-gry','Erro/Ação do Seller':'t-gry','Descartado':'t-gry',
+};
+
+function renderTable(list){
+  // Sort
+  var sorted=list.slice().sort(function(a,b){
+    var av=a[_sortCol],bv=b[_sortCol];
+    if(av==null) return 1; if(bv==null) return -1;
+    return (av<bv?-1:av>bv?1:0)*_sortDir;
+  });
+
+  var maxQ=sorted.reduce(function(m,r){return Math.max(m,r.qntd);},0)||1;
+  var tQ=sorted.reduce(function(s,r){return s+r.qntd;},0);
+  var tF=sorted.reduce(function(s,r){return s+r.falta;},0);
+  var tS=sorted.reduce(function(s,r){return s+r.sep;},0);
+
+  // Totals boxes
+  document.getElementById('tbl-totals').innerHTML=
+    sbox(fmt(tQ),'QNTD Total','var(--blu)')+
+    sbox(fmt(tF),'Falta Sep.','var(--or)')+
+    sbox(fmt(tS),'Já Sep.','var(--grn)')+
+    sbox(sorted.length,'Sellers','var(--t2)');
+
+  var rows=sorted.map(function(r,i){
+    var bCls=i===0?'rk1':i===1?'rk2':i===2?'rk3':'rkn';
+    var stTag=r.status==='Pendente'?'<span class="tag t-amb">Pendente</span>':'<span class="tag t-grn">Resolvido</span>';
+    var andTag='<span class="tag '+(AND_TAG_MAP[r.and]||'t-gry')+'" style="font-size:9px">'+r.and+'</span>';
+    var pctPx=Math.round(r.pct*100);
+    var barCls=r.pct>=.8?'':'r.pct>=.5?\'warn\':\'crit\'';
+    var barColor=r.pct>=.8?'var(--grn)':r.pct>=.4?'var(--amb)':'var(--or)';
+    var agText=r.aging!==null?r.aging+'d':'—';
+    var agColor=r.aging>=45?'var(--red)':r.aging>=30?'var(--amb)':r.aging>=15?'var(--blu)':'var(--grn)';
+    return '<tr>'
+      +'<td><span class="rnk '+bCls+'">'+(i+1)+'</span></td>'
+      +'<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="'+r.shop+'">'+r.shop+'</td>'
+      +'<td class="r">'+stTag+'</td>'
+      +'<td class="r mono" style="color:var(--blu)">'+fmt(r.qntd)+'</td>'
+      +'<td class="r mono" style="color:var(--or);font-weight:600">'+fmt(r.falta)+'</td>'
+      +'<td class="r mono" style="color:var(--grn)">'+fmt(r.sep)+'</td>'
+      +'<td><div style="display:flex;align-items:center;gap:6px"><div class="pbar"><div class="pbar-fill" style="width:'+pctPx+'%;background:'+barColor+'"></div></div><span style="font-size:10px;color:var(--t3);font-family:JetBrains Mono,monospace">'+pctPx+'%</span></div></td>'
+      +'<td class="r mono" style="color:'+agColor+';font-weight:600">'+agText+'</td>'
+      +'<td>'+andTag+'</td>'
+      +'<td style="font-size:11px;color:var(--t2);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.motivo+'</td>'
+      +'<td style="font-size:11px;color:var(--t2)">'+r.resp+'</td>'
+      +'</tr>';
+  }).join('');
+
+  document.getElementById('tbl-body').innerHTML=rows||'<tr><td colspan="11" class="nodata">Nenhum resultado para os filtros selecionados.</td></tr>';
+  document.getElementById('tbl-foot').innerHTML=
+    '<tr><td colspan="3" style="color:var(--or)">TOTAL ('+sorted.length+' sellers)</td>'
+    +'<td class="r mono" style="color:var(--blu)">'+fmt(tQ)+'</td>'
+    +'<td class="r mono" style="color:var(--or)">'+fmt(tF)+'</td>'
+    +'<td class="r mono" style="color:var(--grn)">'+fmt(tS)+'</td>'
+    +'<td colspan="5"></td></tr>';
+}
+
+function updateFooter(list){
+  var today=new Date();
+  var ref=today.getDate().toString().padStart(2,'0')+'/'+(today.getMonth()+1).toString().padStart(2,'0')+'/'+today.getFullYear();
+  document.getElementById('dash-foot').textContent=
+    'SHOPEE · RTS INHOUSE PE · '+ref+' · '+list.length+' CASOS · FALTA SEP.: '+fmt(list.reduce(function(s,r){return s+r.falta;},0))+' UN. · QNTD TOTAL: '+fmt(list.reduce(function(s,r){return s+r.qntd;},0))+' UN.';
+}
+
+/* ══════════ HELPERS ══════════ */
+function set(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
+function fmt(n){return Math.round(n).toLocaleString('pt-BR');}
+function leg(color,name,val){
+  return '<div class="leg-row"><div class="leg-sq" style="background:'+color+'"></div>'
+    +'<div class="leg-nm">'+name+'</div><div class="leg-v">'+val+'</div></div>';
+}
+function agBox(cls,label,count,falta){
+  return '<div class="agb '+cls+'">'
+    +'<div class="agb-n">'+count+'</div>'
+    +'<div class="agb-l">'+label+'</div>'
+    +'<div class="agb-s">'+fmt(falta)+' un. faltando</div></div>';
+}
+function sbox(val,lbl,color){
+  return '<div style="text-align:center;background:var(--bg3);border:1px solid var(--ln);border-radius:8px;padding:7px 13px">'
+    +'<div style="font-size:16px;font-weight:700;color:'+color+';font-family:JetBrains Mono,monospace">'+val+'</div>'
+    +'<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-top:2px">'+lbl+'</div></div>';
+}
+</script>
+</body>
+</html>
