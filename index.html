@@ -187,6 +187,12 @@ tr:hover td{background:#FFF8F6;}
 
 .btn-export-ready{animation:btn-pulse 1.5s ease-in-out 3;}
 @keyframes btn-pulse{0%,100%{box-shadow:0 0 0 0 rgba(238,77,45,.0);}50%{box-shadow:0 0 0 5px rgba(238,77,45,.25);}}
+
+.sp-spin{width:36px;height:36px;border:3px solid #FFD0C5;border-top-color:#EE4D2D;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#loading-overlay{display:none;}
+#loading-overlay.show{display:flex;}
+#gh-modal.show{display:flex;}
 </style>
 <script id="embedded-data" type="application/json">null</script>
 </head>
@@ -292,7 +298,7 @@ tr:hover td{background:#FFF8F6;}
       </button>
       <button class="btn btn-out" id="btn-export" style="display:none;" title="Gera novo arquivo HTML com dados embutidos — substitua o arquivo compartilhado">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 14V6M5 11l3 3 3-3M2 4h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Salvar &amp; distribuir
+        ↑ Publicar no GitHub
       </button>
       <button class="btn btn-fill" onclick="document.getElementById('fi').click()">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 5l3-3 3 3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -360,52 +366,101 @@ tr:hover td{background:#FFF8F6;}
 let ALL=[], FILTERED=[], charts={};
 let SS={col:'aging',dir:1};
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
-const LS_KEY='rts_pe_data', LS_META='rts_pe_meta';
+const LS_KEY='rts_pe_data';
 
-// ── PERSISTENCE: dados embutidos no próprio HTML ──
-// Lê o bloco <script id="embedded-data"> que está no <head>
-function loadEmbedded(){
-  try{
-    const el=document.getElementById('embedded-data');
-    if(!el) return null;
-    const parsed=JSON.parse(el.textContent);
-    if(!parsed||!parsed.rows||!parsed.rows.length) return null;
-    return parsed;
-  }catch(e){return null;}
-}
+// ═══════════════════════════════════════════════════
+// ── GITHUB PERSISTENCE CONFIG ──────────────────────
+//    Preencha as 3 variáveis abaixo com os dados do
+//    seu repositório no GitHub e salve o arquivo.
+// ═══════════════════════════════════════════════════
+const GH = {
+  repo:   'https://r4ntu.github.io/Dash-RTS/',  // ex: 'shopee-ops/rts-dashboard'
+  file:   'data.json',                    // caminho do arquivo de dados no repo
+  branch: 'main'                          // branch principal
+};
+// ═══════════════════════════════════════════════════
 
-// Gera novo HTML com os dados embutidos e força download
-function exportHTML(rows, filename){
-  const meta={filename, savedAt:new Date().toISOString(), count:rows.length};
-  const payload=JSON.stringify({rows, meta});
-  // Pega o HTML atual da página e substitui o bloco embedded-data
-  let html=document.documentElement.outerHTML;
-  html=html.replace(
-    /<script id="embedded-data" type="application\/json">[\s\S]*?<\/script>/,
-    `<script id="embedded-data" type="application/json">${payload}<\/script>`
-  );
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='RTS_Dashboard_PE_'+(new Date().toISOString().slice(0,10))+'.html';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+const LS_TOKEN = 'rts_gh_token';
+const LS_CACHE = 'rts_data_cache';
 
-// Mantém localStorage como cache rápido local
+// ── GitHub token (armazenado por browser, digitado uma vez) ──
+const getToken = () => localStorage.getItem(LS_TOKEN)||'';
+const setToken = t => localStorage.setItem(LS_TOKEN, t);
+
+// ── Cache local (fallback offline) ──
 function saveLocalCache(rows, meta){
-  try{
-    localStorage.setItem(LS_KEY, JSON.stringify({rows, meta}));
-  }catch(e){}
+  try{ localStorage.setItem(LS_CACHE, JSON.stringify({rows,meta,ts:Date.now()})); }catch(e){}
 }
 function loadLocalCache(){
-  try{
-    const raw=localStorage.getItem(LS_KEY);
-    return raw?JSON.parse(raw):null;
-  }catch(e){return null;}
+  try{ const r=localStorage.getItem(LS_CACHE); return r?JSON.parse(r):null; }catch(e){return null;}
 }
-function clearLocalCache(){
-  localStorage.removeItem(LS_KEY);
+
+// ── Loading overlay ──
+function showLoading(msg='Carregando dados...'){
+  const el=document.getElementById('loading-overlay');
+  document.getElementById('loading-msg').textContent=msg;
+  el.classList.add('show');
+}
+function hideLoading(){ document.getElementById('loading-overlay').classList.remove('show'); }
+
+// ── GitHub API ──
+const GH_API = `https://api.github.com/repos/${GH.repo}/contents/${GH.file}`;
+
+async function ghFetch(data){
+  // READ — public repo, sem token
+  const res=await fetch(GH_API+'?ref='+GH.branch+'&_='+Date.now(),{
+    headers:{'Accept':'application/vnd.github.v3+json'}
+  });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const json=await res.json();
+  const raw=atob(json.content.replace(/\n/g,''));
+  return {data:JSON.parse(raw), sha:json.sha};
+}
+
+async function ghPush(rows, filename, token){
+  const meta={filename, savedAt:new Date().toISOString(), count:rows.length};
+  const payload=JSON.stringify({rows,meta});
+  const b64=btoa(unescape(encodeURIComponent(payload)));
+
+  // Pega SHA atual (necessário para update)
+  let sha='';
+  try{
+    const r=await fetch(GH_API+'?ref='+GH.branch,{headers:{'Authorization':'token '+token,'Accept':'application/vnd.github.v3+json'}});
+    if(r.ok){ const j=await r.json(); sha=j.sha||''; }
+  }catch(e){}
+
+  const body={message:'RTS dashboard update — '+new Date().toISOString(),content:b64,branch:GH.branch};
+  if(sha) body.sha=sha;
+
+  const res=await fetch(GH_API,{
+    method:'PUT',
+    headers:{'Authorization':'token '+token,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err.message||'HTTP '+res.status);
+  }
+  return meta;
+}
+
+// ── GitHub modal ──
+function showGhModal(onSuccess){
+  const modal=document.getElementById('gh-modal');
+  const inp=document.getElementById('gh-tok-in');
+  const err=document.getElementById('gh-tok-err');
+  inp.value=getToken();
+  err.style.display='none';
+  modal.classList.add('show');
+
+  document.getElementById('gh-skip').onclick=()=>modal.classList.remove('show');
+  document.getElementById('gh-save').onclick=async()=>{
+    const tok=inp.value.trim();
+    if(!tok){err.textContent='Informe um token válido.';err.style.display='block';return;}
+    setToken(tok);
+    modal.classList.remove('show');
+    if(onSuccess) await onSuccess(tok);
+  };
 }
 
 // ── ACCESSORS ──
@@ -441,27 +496,36 @@ const fmt  =n=>n.toLocaleString('pt-BR');
 function dChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 const PAL=['#EE4D2D','#1A73E8','#00B14F','#F5A623','#9C27B0','#00ACC1','#FF7043','#8D6E63'];
 
-// ── BOOT: prioridade = dados embutidos no HTML > cache local ──
-(function boot(){
-  // 1ª tentativa: dados embutidos no HTML (compartilhado pela equipe)
-  const embedded=loadEmbedded();
-  if(embedded){
-    ALL=embedded.rows;
-    const when=new Date(embedded.meta.savedAt).toLocaleString('pt-BR');
-    setPill(embedded.meta.filename||'dashboard', when, '✦ arquivo compartilhado');
-    showDash(embedded.meta.filename||'—', when);
-    buildOpts(ALL); applyF();
-    return;
+// ── BOOT: busca dados do GitHub, fallback para cache local ──
+(async function boot(){
+  showLoading('Buscando dados atualizados...');
+  try{
+    const {data} = await ghFetch();
+    if(data&&data.rows&&data.rows.length){
+      ALL=data.rows;
+      saveLocalCache(data.rows, data.meta);
+      const when=new Date(data.meta.savedAt).toLocaleString('pt-BR');
+      setPill(data.meta.filename||'—', when, '✦ GitHub');
+      showDash(data.meta.filename||'—', when);
+      buildOpts(ALL); applyF();
+      hideLoading(); return;
+    }
+  }catch(e){
+    console.info('GitHub fetch falhou, usando cache local:', e.message);
   }
-  // 2ª tentativa: cache local (só para o browser que fez upload)
+
+  // Fallback: cache local
   const cached=loadLocalCache();
   if(cached&&cached.rows&&cached.rows.length){
     ALL=cached.rows;
     const when=new Date(cached.meta.savedAt).toLocaleString('pt-BR');
     setPill(cached.meta.filename||'cache', when, '✦ cache local');
-    showDash(cached.meta.filename+' (cache local)', when);
+    showDash(cached.meta.filename||'—', when);
     buildOpts(ALL); applyF();
+    hideLoading(); return;
   }
+
+  hideLoading(); // sem dados — tela de upload
 })();
 
 function showDash(filename, when){
@@ -470,8 +534,6 @@ function showDash(filename, when){
   document.getElementById('fbar').classList.add('show');
   document.getElementById('hdr-meta').textContent=`Base de ${when}`;
   document.getElementById('tb-file').textContent=filename;
-  const btn=document.getElementById('btn-export');
-  if(btn) btn.style.display='none'; // só mostra após novo upload
 }
 
 function setPill(filename, when, suffix){
@@ -485,48 +547,69 @@ function setPill(filename, when, suffix){
 // ── FILE INPUT ──
 document.getElementById('fi').addEventListener('change',function(e){
   const f=e.target.files[0]; if(!f) return;
-  Papa.parse(f,{header:true,skipEmptyLines:true,complete:res=>{
+  Papa.parse(f,{header:true,skipEmptyLines:true,complete:async res=>{
     ALL=res.data.filter(r=>gData(r)&&gShop(r));
+
+    // Renderiza imediatamente
     const meta={filename:f.name, savedAt:new Date().toISOString(), count:ALL.length};
     saveLocalCache(ALL, meta);
     const when=new Date(meta.savedAt).toLocaleString('pt-BR');
-    setPill(f.name, when, '');
     showDash(f.name, when);
-    document.getElementById('hdr-meta').textContent=`Atualizado ${when}`;
-    // Mostra botão de exportar após novo upload
-    const btn=document.getElementById('btn-export');
-    if(btn){ btn.style.display='inline-flex'; btn.classList.add('btn-export-ready'); }
-    buildOpts(ALL);
-    applyF();
+    buildOpts(ALL); applyF();
+
+    // Publica no GitHub
+    await publishToGitHub(ALL, f.name);
   }});
 });
 
+async function publishToGitHub(rows, filename){
+  const btn=document.getElementById('btn-export');
+  const doPublish=async(token)=>{
+    if(btn){ btn.style.display='inline-flex'; btn.textContent='↑ Publicando...'; btn.disabled=true; }
+    try{
+      const meta=await ghPush(rows, filename, token);
+      const when=new Date(meta.savedAt).toLocaleString('pt-BR');
+      setPill(filename, when, '✦ GitHub ✓');
+      document.getElementById('hdr-meta').textContent=`Publicado ${when}`;
+      if(btn){ btn.textContent='✓ Publicado no GitHub'; btn.style.color='var(--green)'; btn.style.borderColor='var(--green)'; btn.disabled=false;
+        setTimeout(()=>{ btn.textContent='↑ Publicar atualização'; btn.style.color=''; btn.style.borderColor=''; btn.style.display='none'; },4000); }
+    }catch(err){
+      console.error('GitHub push error:', err);
+      if(err.message&&err.message.includes('401')){
+        // Token inválido — pede novo
+        localStorage.removeItem(LS_TOKEN);
+        if(btn){ btn.textContent='↑ Publicar no GitHub'; btn.disabled=false; }
+        showGhModal(doPublish);
+      } else {
+        if(btn){ btn.textContent='⚠ Erro: '+err.message.slice(0,30); btn.style.color='var(--red)'; btn.disabled=false;
+          setTimeout(()=>{ btn.textContent='↑ Publicar atualização'; btn.style.color=''; btn.style.display='none'; },5000); }
+      }
+    }
+  };
+
+  const token=getToken();
+  if(!token){ if(btn){ btn.style.display='inline-flex'; btn.textContent='↑ Publicar no GitHub'; btn.disabled=false; } showGhModal(doPublish); }
+  else await doPublish(token);
+}
+
 // ── CLEAR CACHE ──
 document.getElementById('btn-clr-cache').addEventListener('click',function(){
-  if(!confirm('Limpar cache local? (dados embutidos no arquivo compartilhado permanecem)')) return;
-  clearLocalCache();
+  if(!confirm('Limpar cache local? Será necessário recarregar do GitHub.')) return;
+  localStorage.removeItem(LS_CACHE);
   ALL=[]; FILTERED=[];
   const pill=document.getElementById('cache-pill'); if(pill) pill.style.display='none';
-  // Se não tem dados embutidos, volta para upload
-  if(!loadEmbedded()){
-    document.getElementById('upscr').classList.remove('hidden');
-    document.getElementById('content').classList.remove('show');
-    document.getElementById('fbar').classList.remove('show');
-    document.getElementById('hdr-meta').textContent='Nenhuma base carregada';
-    ['f-st','f-mot','f-bd','f-and','f-ag'].forEach(id=>document.getElementById(id).value='');
-  }
+  document.getElementById('upscr').classList.remove('hidden');
+  document.getElementById('content').classList.remove('show');
+  document.getElementById('fbar').classList.remove('show');
+  document.getElementById('hdr-meta').textContent='Nenhuma base carregada';
+  ['f-st','f-mot','f-bd','f-and','f-ag'].forEach(id=>document.getElementById(id).value='');
+  location.reload();
 });
 
-// ── EXPORT / DISTRIBUIR ──
-document.getElementById('btn-export').addEventListener('click',function(){
-  if(!ALL.length){alert('Carregue um CSV primeiro.');return;}
-  exportHTML(ALL, document.getElementById('tb-file').textContent.split(' ✦')[0]);
-  // Feedback visual
-  const btn=this;
-  const orig=btn.innerHTML;
-  btn.innerHTML='✓ Download iniciado!';
-  btn.style.color='var(--green)'; btn.style.borderColor='var(--green)';
-  setTimeout(()=>{btn.innerHTML=orig; btn.style.color=''; btn.style.borderColor='';},3000);
+// ── EXPORT BUTTON (re-publicar) ──
+document.getElementById('btn-export').addEventListener('click',async function(){
+  if(!ALL.length) return;
+  await publishToGitHub(ALL, document.getElementById('tb-file').textContent.replace(' ✦ GitHub ✓',''));
 });
 
 // ── BUILD FILTER OPTIONS ──
@@ -925,5 +1008,32 @@ function srt(col){
   rTable(FILTERED);
 }
 </script>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <div class="sp-spin"></div>
+  <p style="font-size:13px;color:#555;" id="loading-msg">Carregando dados...</p>
+</div>
+
+<!-- GITHUB SETUP MODAL -->
+<div id="gh-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#1A1A1A"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.93 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.7.115 2.5.337 1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.83-2.34 4.68-4.57 4.92.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.02 10.02 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+      <h3 style="font-size:16px;font-weight:700;color:#1A1A1A;">Conectar ao GitHub</h3>
+    </div>
+    <p style="font-size:12px;color:#666;margin-bottom:18px;line-height:1.6;">Para publicar dados automaticamente para todos os usuários, informe um <strong>Personal Access Token</strong> com permissão <code style="background:#f5f5f5;padding:1px 5px;border-radius:3px;">contents:write</code>.</p>
+    <div style="background:#FFF0ED;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:11px;color:#C73E21;line-height:1.6;">
+      <strong>Como criar o token:</strong> GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → New → permissão <em>Contents: Read and write</em> no repositório do dashboard.
+    </div>
+    <label style="font-size:11px;font-weight:700;color:#888;display:block;margin-bottom:4px;">PERSONAL ACCESS TOKEN</label>
+    <input id="gh-tok-in" type="password" placeholder="github_pat_..." style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;outline:none;margin-bottom:14px;">
+    <div id="gh-tok-err" style="display:none;color:#D0021B;font-size:11px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="gh-skip" style="padding:7px 16px;border-radius:6px;border:1px solid #ddd;background:transparent;color:#666;font-size:12px;cursor:pointer;">Cancelar</button>
+      <button id="gh-save" style="padding:7px 18px;border-radius:6px;border:none;background:#EE4D2D;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Salvar token</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
