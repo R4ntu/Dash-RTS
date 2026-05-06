@@ -174,6 +174,15 @@ tr:hover td{background:#FFF8F6;}
 }
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-thumb{background:#CCC;border-radius:3px;}
+
+.cache-pill{display:none;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:20px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.22);font-size:11px;color:#fff;}
+.cache-pill-dot{width:6px;height:6px;border-radius:50%;background:#4CAF50;flex-shrink:0;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.cache-pill-txt{display:flex;flex-direction:column;line-height:1.3;}
+.cache-pill-file{font-weight:600;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cache-pill-when{font-size:10px;opacity:.75;}
+.btn-clr-cache{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;padding:2px 4px;line-height:1;}
+.btn-clr-cache:hover{color:#fff;}
 </style>
 </head>
 <body>
@@ -192,6 +201,14 @@ tr:hover td{background:#FFF8F6;}
   </div>
   <div class="hdr-r">
     <span class="hdr-meta" id="hdr-meta">Nenhuma base carregada</span>
+    <div class="cache-pill" id="cache-pill">
+      <div class="cache-pill-dot"></div>
+      <div class="cache-pill-txt">
+        <span class="cache-pill-file" id="cache-file"></span>
+        <span class="cache-pill-when">salvo em <span id="cache-when"></span></span>
+      </div>
+      <button class="btn-clr-cache" id="btn-clr-cache" title="Limpar base salva">✕</button>
+    </div>
     <label class="btn-upload" for="fi">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 5l3-3 3 3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Carregar CSV
@@ -334,6 +351,28 @@ tr:hover td{background:#FFF8F6;}
 let ALL=[], FILTERED=[], charts={};
 let SS={col:'aging',dir:1};
 const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+const LS_KEY='rts_pe_data', LS_META='rts_pe_meta';
+
+// ── PERSISTENCE ──
+function saveToStorage(rows, filename){
+  try {
+    const meta={filename, savedAt: new Date().toISOString(), count: rows.length};
+    localStorage.setItem(LS_KEY, JSON.stringify(rows));
+    localStorage.setItem(LS_META, JSON.stringify(meta));
+  } catch(e){ console.warn('localStorage cheio ou indisponível', e); }
+}
+function loadFromStorage(){
+  try {
+    const raw=localStorage.getItem(LS_KEY);
+    const meta=JSON.parse(localStorage.getItem(LS_META)||'{}');
+    if(!raw) return null;
+    return {rows: JSON.parse(raw), meta};
+  } catch(e){ return null; }
+}
+function clearStorage(){
+  localStorage.removeItem(LS_KEY);
+  localStorage.removeItem(LS_META);
+}
 
 // ── ACCESSORS ──
 const G=(r,k)=>(r[k]||'').toString().trim().replace(/[\t\r\n]+/g,' ');
@@ -368,19 +407,55 @@ const fmt  =n=>n.toLocaleString('pt-BR');
 function dChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 const PAL=['#EE4D2D','#1A73E8','#00B14F','#F5A623','#9C27B0','#00ACC1','#FF7043','#8D6E63'];
 
+// ── BOOT: restore from localStorage ──
+(function boot(){
+  const saved=loadFromStorage();
+  if(!saved||!saved.rows||!saved.rows.length) return;
+  const {rows,meta}=saved;
+  ALL=rows;
+  const when=new Date(meta.savedAt).toLocaleString('pt-BR');
+  const pill=document.getElementById('cache-pill');
+  if(pill){ pill.style.display='inline-flex'; pill.querySelector('#cache-when').textContent=when; pill.querySelector('#cache-file').textContent=meta.filename||''; }
+  document.getElementById('upscr').classList.add('hidden');
+  document.getElementById('content').classList.add('show');
+  document.getElementById('fbar').classList.add('show');
+  document.getElementById('hdr-meta').textContent=`Base de ${when}`;
+  document.getElementById('tb-file').textContent=(meta.filename||'cache')+' ✦ cache';
+  buildOpts(ALL);
+  applyF();
+})();
+
 // ── FILE INPUT ──
 document.getElementById('fi').addEventListener('change',function(e){
   const f=e.target.files[0]; if(!f) return;
   Papa.parse(f,{header:true,skipEmptyLines:true,complete:res=>{
     ALL=res.data.filter(r=>gData(r)&&gShop(r));
+    saveToStorage(ALL, f.name);
+    const when=new Date().toLocaleString('pt-BR');
+    const pill=document.getElementById('cache-pill');
+    if(pill){ pill.style.display='inline-flex'; pill.querySelector('#cache-when').textContent=when; pill.querySelector('#cache-file').textContent=f.name; }
     document.getElementById('upscr').classList.add('hidden');
     document.getElementById('content').classList.add('show');
     document.getElementById('fbar').classList.add('show');
-    document.getElementById('hdr-meta').textContent=`Atualizado ${new Date().toLocaleString('pt-BR')}`;
+    document.getElementById('hdr-meta').textContent=`Atualizado ${when}`;
     document.getElementById('tb-file').textContent=f.name;
     buildOpts(ALL);
     applyF();
   }});
+});
+
+// ── CLEAR CACHE ──
+document.getElementById('btn-clr-cache').addEventListener('click',function(){
+  if(!confirm('Limpar base salva? O dashboard voltará para a tela de upload.')) return;
+  clearStorage();
+  ALL=[]; FILTERED=[];
+  const pill=document.getElementById('cache-pill');
+  if(pill) pill.style.display='none';
+  document.getElementById('upscr').classList.remove('hidden');
+  document.getElementById('content').classList.remove('show');
+  document.getElementById('fbar').classList.remove('show');
+  document.getElementById('hdr-meta').textContent='Nenhuma base carregada';
+  ['f-st','f-mot','f-bd','f-and','f-ag'].forEach(id=>document.getElementById(id).value='');
 });
 
 // ── BUILD FILTER OPTIONS ──
@@ -533,87 +608,4 @@ function rBar(wid,cid,vals,topN,col,hov,multi){
     type:'bar',
     data:{labels:c.map(e=>e[0]),datasets:[{data:c.map(e=>e[1]),backgroundColor:colors,borderRadius:4,borderWidth:0,hoverBackgroundColor:hov||undefined}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{
-        x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:10},color:'#999'}},
-        y:{grid:{display:false},ticks:{font:{size:10},color:'#555',maxTicksLimit:10}}
-      }}
-  });
-}
-
-// ── BD BARS ──
-function rBD(rows){
-  const c=desc(cnt(rows.map(gBD).filter(v=>v))).slice(0,7);
-  const mx=Math.max(...c.map(e=>e[1]),1);
-  document.getElementById('bd-bars').innerHTML=c.map((e,i)=>`
-    <div class="bd-row">
-      <div class="bd-nm" title="${e[0]}">${e[0].split(' ')[0]}</div>
-      <div class="bd-trk"><div class="bd-fil" style="width:${Math.round(e[1]/mx*100)}%;background:${PAL[i%PAL.length]};"></div></div>
-      <div class="bd-n">${e[1]}</div>
-    </div>`).join('');
-}
-
-// ── BADGE HELPERS ──
-function agBdg(r){
-  const d=agingDays(r);
-  if(d>90) return`<span class="bdg bdg-red">${d}d</span>`;
-  if(d>60) return`<span class="bdg bdg-amb">${d}d</span>`;
-  if(d>30) return`<span class="bdg bdg-blu">${d}d</span>`;
-  return`<span class="bdg bdg-grn">${d}d</span>`;
-}
-function andBdg(v){
-  if(!v||v==='-') return`<span class="bdg bdg-gry">—</span>`;
-  const m={'Em separação':'bdg-blu','Em Transito':'bdg-blu','Entregue a SP':'bdg-grn','Entregue SP':'bdg-grn','Pendente Picking':'bdg-amb','MT Cancelada':'bdg-red','Erro/Ação do Seller':'bdg-red','Sem estoque em PE':'bdg-org','Descartado':'bdg-gry','Duplicado':'bdg-gry'};
-  return`<span class="bdg ${m[v]||'bdg-org'}">${v}</span>`;
-}
-function stBdg(v){return v==='Pendente'?`<span class="bdg bdg-amb">Pendente</span>`:`<span class="bdg bdg-grn">Resolvido</span>`;}
-
-// ── TABLE ──
-function rTable(rows){
-  const S=[...rows].sort((a,b)=>{
-    let av,bv;
-    if(SS.col==='aging')  {av=agingDays(a);bv=agingDays(b);}
-    else if(SS.col==='seller'){av=gShop(a).toLowerCase();bv=gShop(b).toLowerCase();}
-    else if(SS.col==='upd')  {av=(gUpdDate(a)||new Date(0)).getTime();bv=(gUpdDate(b)||new Date(0)).getTime();}
-    else if(SS.col==='pcs')  {av=gPcs(a);bv=gPcs(b);}
-    else if(SS.col==='status'){av=gSt(a);bv=gSt(b);}
-    if(av<bv) return -SS.dir; if(av>bv) return SS.dir; return 0;
-  });
-  const wrap=document.getElementById('t-wrap');
-  if(!S.length){wrap.innerHTML='<div class="empty">Nenhum caso com os filtros selecionados</div>';return;}
-  const ico=col=>`<span class="si">${SS.col===col?(SS.dir===1?'▲':'▼'):'⇅'}</span>`;
-  const sc=col=>SS.col===col?'srt':'';
-  wrap.innerHTML=`<table>
-    <thead><tr>
-      <th onclick="srt('seller')" class="${sc('seller')}">Seller${ico('seller')}</th>
-      <th onclick="srt('status')" class="${sc('status')}">Status${ico('status')}</th>
-      <th onclick="srt('aging')"  class="${sc('aging')}">Aging${ico('aging')}</th>
-      <th>Andamento PE</th>
-      <th>Motivo</th>
-      <th>BD</th>
-      <th onclick="srt('pcs')" class="${sc('pcs')}">Peças${ico('pcs')}</th>
-      <th onclick="srt('upd')" class="${sc('upd')}">Data Update${ico('upd')}</th>
-      <th>Abertura</th>
-    </tr></thead>
-    <tbody>
-      ${S.map(r=>`<tr>
-        <td class="td-sel" title="${gShop(r)}">${gShop(r)}</td>
-        <td>${stBdg(gSt(r))}</td>
-        <td>${agBdg(r)}</td>
-        <td>${andBdg(gAnd(r))}</td>
-        <td class="td-dim" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${gMot(r)}">${gMot(r)||'—'}</td>
-        <td class="td-dim">${gBD(r).split(' ')[0]||'—'}</td>
-        <td class="td-c">${gPcs(r)||'—'}</td>
-        <td class="td-dim">${gUpd(r)||'—'}</td>
-        <td class="td-dim">${gData(r)||'—'}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>`;
-}
-function srt(col){
-  if(SS.col===col) SS.dir*=-1; else{SS.col=col;SS.dir=1;}
-  rTable(FILTERED);
-}
-</script>
-</body>
-</html>
+      
