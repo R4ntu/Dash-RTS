@@ -608,4 +608,87 @@ function rBar(wid,cid,vals,topN,col,hov,multi){
     type:'bar',
     data:{labels:c.map(e=>e[0]),datasets:[{data:c.map(e=>e[1]),backgroundColor:colors,borderRadius:4,borderWidth:0,hoverBackgroundColor:hov||undefined}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:10},color:'#999'}},
+        y:{grid:{display:false},ticks:{font:{size:10},color:'#555',maxTicksLimit:10}}
+      }}
+  });
+}
+
+// ── BD BARS ──
+function rBD(rows){
+  const c=desc(cnt(rows.map(gBD).filter(v=>v))).slice(0,7);
+  const mx=Math.max(...c.map(e=>e[1]),1);
+  document.getElementById('bd-bars').innerHTML=c.map((e,i)=>`
+    <div class="bd-row">
+      <div class="bd-nm" title="${e[0]}">${e[0].split(' ')[0]}</div>
+      <div class="bd-trk"><div class="bd-fil" style="width:${Math.round(e[1]/mx*100)}%;background:${PAL[i%PAL.length]};"></div></div>
+      <div class="bd-n">${e[1]}</div>
+    </div>`).join('');
+}
+
+// ── BADGE HELPERS ──
+function agBdg(r){
+  const d=agingDays(r);
+  if(d>90) return`<span class="bdg bdg-red">${d}d</span>`;
+  if(d>60) return`<span class="bdg bdg-amb">${d}d</span>`;
+  if(d>30) return`<span class="bdg bdg-blu">${d}d</span>`;
+  return`<span class="bdg bdg-grn">${d}d</span>`;
+}
+function andBdg(v){
+  if(!v||v==='-') return`<span class="bdg bdg-gry">—</span>`;
+  const m={'Em separação':'bdg-blu','Em Transito':'bdg-blu','Entregue a SP':'bdg-grn','Entregue SP':'bdg-grn','Pendente Picking':'bdg-amb','MT Cancelada':'bdg-red','Erro/Ação do Seller':'bdg-red','Sem estoque em PE':'bdg-org','Descartado':'bdg-gry','Duplicado':'bdg-gry'};
+  return`<span class="bdg ${m[v]||'bdg-org'}">${v}</span>`;
+}
+function stBdg(v){return v==='Pendente'?`<span class="bdg bdg-amb">Pendente</span>`:`<span class="bdg bdg-grn">Resolvido</span>`;}
+
+// ── TABLE ──
+function rTable(rows){
+  const S=[...rows].sort((a,b)=>{
+    let av,bv;
+    if(SS.col==='aging')  {av=agingDays(a);bv=agingDays(b);}
+    else if(SS.col==='seller'){av=gShop(a).toLowerCase();bv=gShop(b).toLowerCase();}
+    else if(SS.col==='upd')  {av=(gUpdDate(a)||new Date(0)).getTime();bv=(gUpdDate(b)||new Date(0)).getTime();}
+    else if(SS.col==='pcs')  {av=gPcs(a);bv=gPcs(b);}
+    else if(SS.col==='status'){av=gSt(a);bv=gSt(b);}
+    if(av<bv) return -SS.dir; if(av>bv) return SS.dir; return 0;
+  });
+  const wrap=document.getElementById('t-wrap');
+  if(!S.length){wrap.innerHTML='<div class="empty">Nenhum caso com os filtros selecionados</div>';return;}
+  const ico=col=>`<span class="si">${SS.col===col?(SS.dir===1?'▲':'▼'):'⇅'}</span>`;
+  const sc=col=>SS.col===col?'srt':'';
+  wrap.innerHTML=`<table>
+    <thead><tr>
+      <th onclick="srt('seller')" class="${sc('seller')}">Seller${ico('seller')}</th>
+      <th onclick="srt('status')" class="${sc('status')}">Status${ico('status')}</th>
+      <th onclick="srt('aging')"  class="${sc('aging')}">Aging${ico('aging')}</th>
+      <th>Andamento PE</th>
+      <th>Motivo</th>
+      <th>BD</th>
+      <th onclick="srt('pcs')" class="${sc('pcs')}">Peças${ico('pcs')}</th>
+      <th onclick="srt('upd')" class="${sc('upd')}">Data Update${ico('upd')}</th>
+      <th>Abertura</th>
+    </tr></thead>
+    <tbody>
+      ${S.map(r=>`<tr>
+        <td class="td-sel" title="${gShop(r)}">${gShop(r)}</td>
+        <td>${stBdg(gSt(r))}</td>
+        <td>${agBdg(r)}</td>
+        <td>${andBdg(gAnd(r))}</td>
+        <td class="td-dim" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${gMot(r)}">${gMot(r)||'—'}</td>
+        <td class="td-dim">${gBD(r).split(' ')[0]||'—'}</td>
+        <td class="td-c">${gPcs(r)||'—'}</td>
+        <td class="td-dim">${gUpd(r)||'—'}</td>
+        <td class="td-dim">${gData(r)||'—'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+function srt(col){
+  if(SS.col===col) SS.dir*=-1; else{SS.col=col;SS.dir=1;}
+  rTable(FILTERED);
+}
+</script>
+</body>
+</html>
