@@ -337,6 +337,18 @@ tr:hover td{background:#FFF8F6;}
     </div>
   </div>
 
+
+  <!-- EVOLUÇÃO MENSAL -->
+  <div class="row1">
+    <div class="card">
+      <div class="c-hdr">
+        <div class="c-ttl"><div class="c-dot"></div>Evolução mensal — volume de peças por Data Update</div>
+        <div style="display:flex;gap:8px;align-items:center;" id="evol-legend"></div>
+      </div>
+      <div style="position:relative;height:220px;"><canvas id="c-evol" role="img" aria-label="Evolução mensal de peças solicitadas por mês">Sem dados.</canvas></div>
+    </div>
+  </div>
+
   <!-- ROW 2 -->
   <div class="row2">
     <div class="card">
@@ -727,11 +739,159 @@ function render(rows){
   document.getElementById('tbl-bdg').textContent=rows.length+' casos';
 
   rAging(rows);
+  rEvol(rows);
   rDonut(pend.length,res.length);
   rBarStatus('and-wrap','c-and',rows,gAnd,9);
   rBar('mot-wrap','c-mot',rows,gMot,7,null,null,true);
   rBD(rows);
   rTable(rows);
+}
+
+// ── EVOLUÇÃO MENSAL ──
+function rEvol(rows){
+  dChart('c-evol');
+  const map={};
+  rows.forEach(r=>{
+    const d=gUpdDate(r); if(!d) return;
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const st=gSt(r);
+    if(!map[key]) map[key]={pcs:0,pcsPend:0,pcsRes:0,casos:0};
+    const p=gPcs(r);
+    map[key].pcs+=p;
+    map[key].casos++;
+    if(st==='Pendente') map[key].pcsPend+=p;
+    else                map[key].pcsRes+=p;
+  });
+  const keys=Object.keys(map).sort();
+  if(!keys.length) return;
+
+  const labels=keys.map(k=>{
+    const [y,m]=k.split('-');
+    const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return months[parseInt(m)-1]+'/'+y.slice(2);
+  });
+  const totPcs   =keys.map(k=>map[k].pcs);
+  const pendPcs  =keys.map(k=>map[k].pcsPend);
+  const resPcs   =keys.map(k=>map[k].pcsRes);
+  const casos    =keys.map(k=>map[k].casos);
+  const maxPcs   =Math.max(...totPcs,1);
+
+  // Legend
+  document.getElementById('evol-legend').innerHTML=`
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555;"><span style="width:10px;height:3px;background:#EE4D2D;display:inline-block;border-radius:2px;"></span>Total peças</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555;"><span style="width:10px;height:10px;background:rgba(0,177,79,.25);display:inline-block;border-radius:2px;border:1.5px solid #00B14F;"></span>Resolvido</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555;"><span style="width:10px;height:10px;background:rgba(245,166,35,.25);display:inline-block;border-radius:2px;border:1.5px solid #F5A623;"></span>Pendente</span>`;
+
+  charts['c-evol']=new Chart(document.getElementById('c-evol'),{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Resolvido',
+          data:resPcs,
+          backgroundColor:'rgba(0,177,79,.3)',
+          borderColor:'#00B14F',
+          borderWidth:1.5,
+          borderRadius:4,
+          order:2
+        },
+        {
+          label:'Pendente',
+          data:pendPcs,
+          backgroundColor:'rgba(245,166,35,.3)',
+          borderColor:'#F5A623',
+          borderWidth:1.5,
+          borderRadius:4,
+          order:2
+        },
+        {
+          label:'Total peças',
+          data:totPcs,
+          type:'line',
+          borderColor:'#EE4D2D',
+          backgroundColor:'rgba(238,77,45,.08)',
+          borderWidth:2.5,
+          pointBackgroundColor:'#EE4D2D',
+          pointRadius:4,
+          pointHoverRadius:6,
+          fill:true,
+          tension:.35,
+          order:1,
+          yAxisID:'y'
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        datalabels:{
+          display:ctx=>{
+            // Mostra rótulo apenas no dataset Pendente (índice 1) = topo da barra empilhada
+            // e no dataset da linha (índice 2)
+            if(ctx.datasetIndex===2) return true;  // linha: total
+            if(ctx.datasetIndex===1) return ctx.dataset.data[ctx.dataIndex]>0||resPcs[ctx.dataIndex]>0;
+            return false;
+          },
+          anchor:ctx=>ctx.datasetIndex===2?'end':'end',
+          align:ctx=>ctx.datasetIndex===2?'top':'end',
+          offset:ctx=>ctx.datasetIndex===2?4:2,
+          color:ctx=>ctx.datasetIndex===2?'#C73E21':'#333',
+          font:ctx=>ctx.datasetIndex===2
+            ?{size:10,weight:'700'}
+            :{size:9.5,weight:'700'},
+          formatter:(v,ctx)=>{
+            const i=ctx.dataIndex;
+            if(ctx.datasetIndex===2){
+              // linha: mostra total formatado
+              return v>=1000?(v/1000).toFixed(1)+'k':v;
+            }
+            // topo da barra: mostra total da barra (res+pend)
+            const tot=totPcs[i];
+            if(!tot) return '';
+            return tot>=1000?(tot/1000).toFixed(1)+'k':tot+'';
+          },
+          textAlign:'center',
+          clamp:true
+        },
+        tooltip:{
+          callbacks:{
+            title:ctx=>ctx[0]?.label||'',
+            label:ctx=>{
+              if(ctx.datasetIndex===0) return ` Resolvido: ${ctx.parsed.y.toLocaleString('pt-BR')} pçs`;
+              if(ctx.datasetIndex===1) return ` Pendente: ${ctx.parsed.y.toLocaleString('pt-BR')} pçs`;
+              return ` Total: ${ctx.parsed.y.toLocaleString('pt-BR')} pçs`;
+            },
+            afterBody:ctx=>{
+              const i=ctx[0]?.dataIndex;
+              if(i===undefined) return '';
+              return ['','Casos: '+casos[i]];
+            }
+          }
+        }
+      },
+      scales:{
+        x:{
+          grid:{color:'rgba(0,0,0,.04)'},
+          ticks:{font:{size:10.5},color:'#888',maxRotation:0},
+          stacked:true
+        },
+        y:{
+          grid:{color:'rgba(0,0,0,.05)'},
+          ticks:{font:{size:10},color:'#999',
+            callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v
+          },
+          stacked:true,
+          beginAtZero:true,
+          grace:'15%'
+        }
+      }
+    },
+    plugins:[ChartDataLabels]
+  });
 }
 
 // ── AGING ──
